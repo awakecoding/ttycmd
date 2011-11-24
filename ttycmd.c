@@ -26,33 +26,31 @@ char default_tty_dev[] = "/dev/ttyACM0";
 #define CMD_DIST_LEFT		(0x80 | 0x22)
 #define CMD_DIST_RIGHT		(0x80 | 0x23)
 #define CMD_SPEED		(0x80 | 0x31)
+#define CMD_HELP		(0x00 | 0x01)
+#define CMD_QUIT		(0x00 | 0x02)
+#define CMD_UNKNOWN		(0x80 | 0x00)
 
 #define STATE_NOTHING	0x00
 #define STATE_BASIC	0x10
 #define STATE_ORDERS	0x20
 #define STATE_DANCE	0x30
+#define STATE_UNKNOWN	0xFF
 
-static char help_str[] =
-	"\tteensy-mode\n"
-	"\tchange-state\n"
-	"\thard-turn\n"
-	"\tsoft-turn\n"
-	"\tset-direction\n"
-	"\tdist-center\n"
-	"\tdist-left\n"
-	"\tdist-right\n"
-	"\tspeed\n";
+struct state_s
+{
+	uint8 id;
+	char* name;
+};
+typedef struct state_s state_t;
 
-static char CMD_TEENSY_MODE_STRING[] = "teensy-mode";
-static char CMD_CHANGE_STATE_STRING[] = "change-state";
-static char CMD_HARD_TURN_STRING[] = "hard-turn";
-static char CMD_SOFT_TURN_STRING[] = "soft-turn";
-static char CMD_SET_DIRECTION_STRING[] = "set-dir";
-static char CMD_DIST_CENTER_STRING[] = "dist-center";
-static char CMD_DIST_LEFT_STRING[] = "dist-left";
-static char CMD_DIST_RIGHT_STRING[] = "dist-right";
-static char CMD_SPEED_STRING[] = "speed";
-static char CMD_UNKNOWN_STRING[] = "unknown";
+static state_t states[] =
+{
+	{ STATE_NOTHING, "nothing" },
+	{ STATE_BASIC, "basic" },
+	{ STATE_ORDERS, "orders" },
+	{ STATE_DANCE, "dance" },
+	{ STATE_UNKNOWN, "" }
+};
 
 struct command_s
 {
@@ -61,76 +59,206 @@ struct command_s
 };
 typedef struct command_s command_t;
 
-char* get_command_name(uint8 cmd)
+static command_t commands[] =
 {
-	switch (cmd)
+	{ CMD_TEENSY_MODE, "mode" },
+	{ CMD_CHANGE_STATE, "state" },
+	{ CMD_HARD_TURN, "hard-turn" },
+	{ CMD_SOFT_TURN, "soft-turn" },
+	{ CMD_SET_DIRECTION, "set-direction" },
+	{ CMD_DIST_CENTER, "dist-center" },
+	{ CMD_DIST_LEFT, "dist-left" },
+	{ CMD_DIST_RIGHT, "dist-right" },
+	{ CMD_SPEED, "speed" },
+	{ CMD_HELP, "help" },
+	{ CMD_QUIT, "quit" },
+	{ CMD_UNKNOWN, "" }
+};
+
+void print_command_list()
+{
+	int i;
+
+	for (i = 0; i < sizeof(commands) / sizeof(command_t); i++)
 	{
-		case CMD_TEENSY_MODE:
-			return CMD_TEENSY_MODE_STRING;
-			break;
-
-                case CMD_CHANGE_STATE:
-                        return CMD_CHANGE_STATE_STRING;
-                        break;
-
-                case CMD_HARD_TURN:
-                        return CMD_HARD_TURN_STRING;
-                        break;
-
-                case CMD_SOFT_TURN:
-                        return CMD_SOFT_TURN_STRING;
-                        break;
-
-                case CMD_SET_DIRECTION:
-                        return CMD_SET_DIRECTION_STRING;
-                        break;
-
-                case CMD_DIST_CENTER:
-                        return CMD_DIST_CENTER_STRING;
-                        break;
-
-                case CMD_DIST_LEFT:
-                        return CMD_DIST_LEFT_STRING;
-                        break;
-
-                case CMD_DIST_RIGHT:
-                        return CMD_DIST_RIGHT_STRING;
-                        break;
-
-                case CMD_SPEED:
-                        return CMD_SPEED_STRING;
-                        break;
-
-		default:
-			return CMD_UNKNOWN_STRING;
-			break;
+		printf("\t%s\n", commands[i].name);
 	}
+}
+
+char* get_command_name(uint8 cmd_id)
+{
+	int i;
+
+	for (i = 0; i < sizeof(commands) / sizeof(command_t); i++)
+	{
+		if (commands[i].id == cmd_id)
+			return commands[i].name;
+	}
+
+	return commands[i].name;
+}
+
+uint8 get_command_id(char* cmd_name)
+{
+	int i;
+
+	if (cmd_name == NULL)
+		return CMD_UNKNOWN;
+
+	for (i = 0; i < sizeof(commands) / sizeof(command_t); i++)
+	{
+		if (strcmp(commands[i].name, cmd_name) == 0)
+			return commands[i].id;
+	}
+
+	return CMD_UNKNOWN;
+}
+
+char* get_state_name(uint8 state_id)
+{
+	int i;
+
+	for (i = 0; i < sizeof(states) / sizeof(state_t); i++)
+	{
+		if (states[i].id == state_id)
+			return states[i].name;
+	}
+
+	return states[i].name;
+}
+
+uint8 get_state_id(char* state_name)
+{
+	int i;
+
+	if (state_name == NULL)
+		return STATE_UNKNOWN;
+
+	for (i = 0; i < sizeof(states) / sizeof(state_t); i++)
+	{
+		if (strcmp(states[i].name, state_name) == 0)
+			return states[i].id;
+	}
+
+	return STATE_UNKNOWN;
+}
+
+void send_command(int fd, uint8 cmd, uint8 val)
+{
+	write(fd, &cmd, 1);
+	write(fd, &val, 1);	
 }
 
 void* CmdThreadProc(void* data)
 {
+	char* p;
+	uint8 state;
+	uint8 val = 0;
 	uint8 cmd = 0;
-	uint8 value = 0;
-	char command[128];
+	char* cmd_str;
+	char* val_str;
+	char input[128];
 
 	while (1)
 	{
-		//printf("cmd: ");
-		//scanf("%s", command);
+		printf("cmd: ");
+		scanf("%s", input);
 
-		printf("STATE_NOTHING\n");
-		cmd = CMD_CHANGE_STATE;
-		value = STATE_NOTHING;
-		write(tty_fd, &cmd, 1);
-		write(tty_fd, &value, 1);
-		sleep(5);
+		p = strchr(input, ':');
+		val_str = cmd_str = NULL;
 
-		printf("STATE_BASIC\n");
-		cmd = CMD_CHANGE_STATE;
-		value = STATE_BASIC;
-		write(tty_fd, &cmd, 1);
-		write(tty_fd, &value, 1);
-		sleep(5);
+		if (p != NULL)
+		{
+			val_str = p + 1;
+			input[(p - input)] = '\0';
+		}
+
+		cmd_str = input;
+
+		cmd = get_command_id(cmd_str);
+
+		if (cmd == CMD_UNKNOWN)
+		{
+			printf("unknown command!\n");
+			continue;
+		}
+
+		switch (cmd)
+		{
+			case CMD_TEENSY_MODE:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_CHANGE_STATE:
+				state = get_state_id(val_str);
+				
+				if (state == STATE_UNKNOWN)
+				{
+					printf("unknown state!\n");
+					continue;
+				}
+
+				send_command(tty_fd, cmd, state);
+				break;
+
+			case CMD_HARD_TURN:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_SOFT_TURN:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_SET_DIRECTION:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_DIST_CENTER:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_DIST_LEFT:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_DIST_RIGHT:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_SPEED:
+				send_command(tty_fd, cmd, 0);
+				break;
+
+			case CMD_HELP:
+				val = get_command_id(val_str);
+
+				if (val == CMD_UNKNOWN)
+				{
+					printf("command syntax: <command>:<value>\n");
+					print_command_list();
+				}
+				else
+				{
+					switch (val)
+					{
+						case CMD_CHANGE_STATE:
+							printf("state:<state>, where <state> is one of the following:\n");
+							printf("nothing, basic, orders, dance.\n");
+							break;
+
+						default:
+							printf("command syntax: <command>:<value>\n");
+							print_command_list();
+							break;
+					}
+				}
+
+				break;
+
+			case CMD_QUIT:
+				exit(0);
+				break;
+		}
 	}
 
 	pthread_exit(NULL);
@@ -162,17 +290,12 @@ int main(int argc, char** argv)
 
 	if (argc > 1)
 	{
-		if (strcmp(argv[1], "-h") == 0)
-		{
-			printf("help:\n%s", help_str);
-			exit(0);
-		}
-		else
-		{
-			printf("using device: %s\n", argv[1]);
-			tty_dev = argv[1];
-		}
+		printf("using device: %s\n", argv[1]);
+		tty_dev = argv[1];
 	}
+
+	printf("command syntax: <command>:<value>\n");
+	print_command_list();
 
 	memset(&tio, 0, sizeof(tio));
 	tio.c_iflag = 0;
