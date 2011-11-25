@@ -17,6 +17,8 @@ static void* comm_thread_status;
 
 char default_tty_dev[] = "/dev/ttyACM0";
 
+#define NELEMENTS(_array)	(sizeof(_array) / sizeof(_array[0]))
+
 #define CMD_TEENSY_MODE		(0x80 | 0x01)
 #define CMD_CHANGE_STATE	(0x80 | 0x02)
 #define CMD_HARD_TURN		(0x80 | 0x11)
@@ -28,20 +30,49 @@ char default_tty_dev[] = "/dev/ttyACM0";
 #define CMD_SPEED		(0x80 | 0x31)
 #define CMD_HELP		(0x00 | 0x01)
 #define CMD_QUIT		(0x00 | 0x02)
-#define CMD_UNKNOWN		(0x80 | 0x00)
+#define CMD_UNKNOWN		(0x80 | 0xFF)
 
-#define STATE_NOTHING	0x00
-#define STATE_BASIC	0x10
-#define STATE_ORDERS	0x20
-#define STATE_DANCE	0x30
-#define STATE_UNKNOWN	0xFF
+#define STATE_NOTHING		0x00
+#define STATE_BASIC		0x10
+#define STATE_ORDERS		0x20
+#define STATE_DANCE		0x30
+#define STATE_UNKNOWN		0xFF
 
-struct state_s
+#define MOVE_BACKWARD		0x10
+#define MOVE_FORWARD		0x20
+#define MOVE_UNKNOWN		0xFF
+
+#define TURN_NONE		0x00
+#define TURN_LEFT		0x10
+#define TURN_RIGHT		0x20
+#define TURN_UNKNOWN		0xFF
+
+struct pair_s
 {
 	uint8 id;
 	char* name;
 };
-typedef struct state_s state_t;
+typedef struct pair_s pair_t;
+
+typedef pair_t turn_t;
+typedef pair_t move_t;
+typedef pair_t state_t;
+typedef pair_t command_t;
+
+static turn_t turns[] =
+{
+	{ TURN_NONE, "none" },
+	{ TURN_LEFT, "left" },
+	{ TURN_RIGHT, "right" },
+	{ TURN_UNKNOWN, "" }
+};
+
+static move_t moves[] =
+{
+	{ MOVE_FORWARD, "forward" },
+	{ MOVE_BACKWARD, "backward" },
+	{ MOVE_UNKNOWN, "" }
+};
 
 static state_t states[] =
 {
@@ -51,13 +82,6 @@ static state_t states[] =
 	{ STATE_DANCE, "dance" },
 	{ STATE_UNKNOWN, "" }
 };
-
-struct command_s
-{
-	uint8 id;
-	char* name;
-};
-typedef struct command_s command_t;
 
 static command_t commands[] =
 {
@@ -85,68 +109,94 @@ void print_command_list()
 	}
 }
 
-char* get_command_name(uint8 cmd_id)
+char* get_name_from_id(uint8 id, pair_t* pairs, int npairs)
 {
 	int i;
 
-	for (i = 0; i < sizeof(commands) / sizeof(command_t); i++)
+	for (i = 0; i < npairs; i++)
 	{
-		if (commands[i].id == cmd_id)
-			return commands[i].name;
+		if (pairs[i].id == id)
+			return pairs[i].name;
 	}
 
-	return commands[i].name;
+	return pairs[i].name;
 }
 
-uint8 get_command_id(char* cmd_name)
+uint8 get_id_from_name(char* name, pair_t* pairs, int npairs)
 {
 	int i;
 
-	if (cmd_name == NULL)
-		return CMD_UNKNOWN;
+	if (name == NULL)
+		return 0xFF;
 
-	for (i = 0; i < sizeof(commands) / sizeof(command_t); i++)
+	for (i = 0; i < npairs; i++)
 	{
-		if (strcmp(commands[i].name, cmd_name) == 0)
-			return commands[i].id;
+		if (strcmp(pairs[i].name, name) == 0)
+			return pairs[i].id;
 	}
 
-	return CMD_UNKNOWN;
+	return 0xFF;
+}
+
+char* get_turn_name(uint8 turn_id)
+{
+	return get_name_from_id(turn_id, turns, NELEMENTS(turns));
+}
+
+uint8 get_turn_id(char* turn_name)
+{
+	return get_id_from_name(turn_name, turns, NELEMENTS(turns));
+}
+
+char* get_move_name(uint8 move_id)
+{
+	return get_name_from_id(move_id, moves, NELEMENTS(moves));
+}
+
+uint8 get_move_id(char* move_name)
+{
+	return get_id_from_name(move_name, moves, NELEMENTS(moves));
 }
 
 char* get_state_name(uint8 state_id)
 {
-	int i;
-
-	for (i = 0; i < sizeof(states) / sizeof(state_t); i++)
-	{
-		if (states[i].id == state_id)
-			return states[i].name;
-	}
-
-	return states[i].name;
+	return get_name_from_id(state_id, states, NELEMENTS(states));
 }
 
 uint8 get_state_id(char* state_name)
 {
-	int i;
+	return get_id_from_name(state_name, states, NELEMENTS(states));
+}
 
-	if (state_name == NULL)
-		return STATE_UNKNOWN;
+char* get_command_name(uint8 cmd_id)
+{
+	return get_name_from_id(cmd_id, commands, NELEMENTS(commands));
+}
 
-	for (i = 0; i < sizeof(states) / sizeof(state_t); i++)
-	{
-		if (strcmp(states[i].name, state_name) == 0)
-			return states[i].id;
-	}
+uint8 get_command_id(char* cmd_name)
+{
+	return get_id_from_name(cmd_name, commands, NELEMENTS(commands));
+}
 
-	return STATE_UNKNOWN;
+uint8 get_decimal_value(char* decimal_str)
+{
+	int decimal;
+
+	if (decimal_str == NULL)
+		return 0;
+
+	decimal = atoi(decimal_str);
+
+	return decimal;
 }
 
 void send_command(int fd, uint8 cmd, uint8 val)
 {
+	printf("sending command \"%s\" (0x%02X) with value %d (0x%02X)\n",
+		get_command_name(cmd), cmd, val, val);
+
 	write(fd, &cmd, 1);
-	write(fd, &val, 1);	
+	write(fd, &val, 1);
 }
 
 void* CmdThreadProc(void* data)
@@ -186,7 +236,15 @@ void* CmdThreadProc(void* data)
 		switch (cmd)
 		{
 			case CMD_TEENSY_MODE:
-				send_command(tty_fd, cmd, 0);
+				state = get_state_id(val_str);
+				
+				if (state == STATE_UNKNOWN)
+				{
+					printf("unknown mode!\n");
+					continue;
+				}
+
+				send_command(tty_fd, cmd, state);
 				break;
 
 			case CMD_CHANGE_STATE:
@@ -202,31 +260,59 @@ void* CmdThreadProc(void* data)
 				break;
 
 			case CMD_HARD_TURN:
-				send_command(tty_fd, cmd, 0);
+				val = get_turn_id(val_str);
+
+				if (val == TURN_UNKNOWN)
+				{
+					printf("unknown turn!\n");
+					continue;
+				}
+
+				send_command(tty_fd, cmd, val);
 				break;
 
 			case CMD_SOFT_TURN:
-				send_command(tty_fd, cmd, 0);
+				val = get_turn_id(val_str);
+
+				if (val == TURN_UNKNOWN)
+				{
+					printf("unknown turn!\n");
+					continue;
+				}
+
+				send_command(tty_fd, cmd, val);
 				break;
 
 			case CMD_SET_DIRECTION:
-				send_command(tty_fd, cmd, 0);
+				val = get_move_id(val_str);
+
+				if (val == MOVE_UNKNOWN)
+				{
+					printf("unknown move direction!\n");
+					continue;
+				}
+
+				send_command(tty_fd, cmd, val);
 				break;
 
 			case CMD_DIST_CENTER:
-				send_command(tty_fd, cmd, 0);
+				val = get_decimal_value(val_str);
+				send_command(tty_fd, cmd, val);
 				break;
 
 			case CMD_DIST_LEFT:
-				send_command(tty_fd, cmd, 0);
+				val = get_decimal_value(val_str);
+				send_command(tty_fd, cmd, val);
 				break;
 
 			case CMD_DIST_RIGHT:
-				send_command(tty_fd, cmd, 0);
+				val = get_decimal_value(val_str);
+				send_command(tty_fd, cmd, val);
 				break;
 
 			case CMD_SPEED:
-				send_command(tty_fd, cmd, 0);
+				val = get_decimal_value(val_str);
+				send_command(tty_fd, cmd, val);
 				break;
 
 			case CMD_HELP:
