@@ -38,13 +38,13 @@ char default_tty_dev[] = "/dev/ttyACM0";
 #define STATE_DANCE		0x30
 #define STATE_UNKNOWN		0xFF
 
-#define MOVE_BACKWARD		0x10
-#define MOVE_FORWARD		0x20
+#define MOVE_FORWARD		0x10
+#define MOVE_BACKWARD		0x20
 #define MOVE_UNKNOWN		0xFF
 
 #define TURN_NONE		0x00
-#define TURN_LEFT		0x10
-#define TURN_RIGHT		0x20
+#define TURN_RIGHT		0x10
+#define TURN_LEFT		0x20
 #define TURN_UNKNOWN		0xFF
 
 struct pair_s
@@ -237,7 +237,7 @@ void* CmdThreadProc(void* data)
 		{
 			case CMD_TEENSY_MODE:
 				state = get_state_id(val_str);
-				
+
 				if (state == STATE_UNKNOWN)
 				{
 					printf("unknown mode!\n");
@@ -249,7 +249,7 @@ void* CmdThreadProc(void* data)
 
 			case CMD_CHANGE_STATE:
 				state = get_state_id(val_str);
-				
+
 				if (state == STATE_UNKNOWN)
 				{
 					printf("unknown state!\n");
