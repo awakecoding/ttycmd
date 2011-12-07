@@ -357,7 +357,10 @@ void* BTThreadProc(void* data)
   }
 }
 
-/* opencv stuff goes here */
+/* 
+  opencv stuff goes here 
+  Thanks to Robert Nash
+*/
 void* CameraThreadProc(void* tdata)
 {
     CvCapture *capture = 0;
