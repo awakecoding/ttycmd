@@ -357,7 +357,10 @@ void* BTThreadProc(void* data)
   }
 }
 
-/* opencv stuff goes here */
+/* 
+  opencv stuff goes here 
+  Thanks to Robert Nash
+*/
 void* CameraThreadProc(void* tdata)
 {
     CvCapture *capture = 0;
@@ -401,45 +404,18 @@ void* CameraThreadProc(void* tdata)
  
     channel_checking = 2; // red
 
-#if 0
-    for (arg_index=0; arg_index<argc; ++arg_index)
-    {
-      if (!strcmp(argv[arg_index],"--color=blue"))
-      {
-        channel_checking = 0; 
-        printf("Detecting blue\n");
-      }
-      if (!strcmp(argv[arg_index],"--color=green")) 
-      {
-        channel_checking = 1; 
-        printf("Detecting green\n");
-      }
-      if (!strcmp(argv[arg_index],"--color=red")) 
-      {
-        channel_checking = 2; 
-        printf("Detecting red\n");
-      }
-    }
-#endif 
-
     /* initialize camera */
     capture = cvCaptureFromCAM( 0 );
  
-    /* always check */
     if ( !capture ) {
         fprintf( stderr, "Cannot open initialize webcam!\n" );
         return 1;
     }
  
-    /* create a window for the video */
-    // cvNamedWindow( "result", CV_WINDOW_AUTOSIZE );
- 
-    while( key != 'q' ) {
-        /* get a frame */
+    while(1) {
         frame = cvQueryFrame( capture );
 
-        /* always check */
-        if( !frame ) break;
+        if (!frame) break;
        
         data = (unsigned char*) frame->imageData; 
 
@@ -488,13 +464,9 @@ void* CameraThreadProc(void* tdata)
           } 
         }
 
-        // printf("countred: %d\n", count_red);
-
         percent_r_section1 = 100 * (double) total_section1 / (screen_segment * height); 
         percent_r_section2 = 100 * (double) total_section2 / (screen_segment * height); 
         percent_r_section3 = 100 * (double) total_section3 / (screen_segment * height); 
-
-#ifdef DEBUGMODE
 
         /*
             Note - This is your intelligence!
@@ -555,21 +527,15 @@ void* CameraThreadProc(void* tdata)
           ,percent_r_section2 
           ,percent_r_section3 
           ,direction
-        );*/
+        ); */
 
         for(loop=0; loop<1000; ++loop)
           printf("\b"); 
-
-#endif 
-        /* display current frame - have disabled when using beagle */
-        // cvShowImage( "result", frame );
- 
-        /* exit if user press 'q' */
-        key = cvWaitKey( 1 );
+        
+        /* Wait 1 millisecond */
+        usleep(1*1000);
     }
  
-    /* free memory */
-    // cvDestroyWindow( "result" );
     cvReleaseCapture( &capture );
  
 }
